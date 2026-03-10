@@ -1,143 +1,375 @@
 ---
-name: insurance-policy-compare
-description: Use when comparing two insurance policy PDF documents, extracting coverage details and generating comparison reports
+name: insurance-policy-parser
+description: 解析保险条款 PDF，自动抽取核心字段（免赔额、赔付比例、续保条件、医院要求等）。
+             支持众安、人保、君龙等保险公司条款格式。
+             使用场景：用户上传保险条款 PDF，需要结构化分析条款内容。
+             重要提示：具体数字（免赔额、总限额等）可能在保险单（policy schedule）中，不在条款中。
+             触发词："分析这个保险条款"、"解析这个 PDF"、"提取免赔额"、"这个保险保什么"
 ---
 
-# Insurance Policy Compare
+# Insurance Policy Parser - 保险条款结构化解析
 
-## Overview
+## Purpose
 
-Extract core coverage fields from insurance policy PDFs and generate structured comparison reports. Supports standardized field extraction based on professional insurance analysis framework.
+解析保险条款 PDF，自动抽取 16 个核心字段，输出带置信度评分和质量报告的结构化结果。
 
-## When to Use
+**核心能力**：
+- ✅ 16 个关键字段抽取（数值型、逻辑型、场景型）
+- ✅ 每个字段附带原始文本来源（source_text）
+- ✅ 置信度评分（0-1）
+- ✅ 逻辑冲突检测
+- ✅ 质量评分 + 人工审核建议
 
-- Comparing two insurance products (e.g., medical, life, property)
-- Extracting key terms like deductibles, reimbursement rates, waiting periods
-- Creating structured comparison reports from unstructured policy documents
-- Analyzing coverage differences between policy versions or competitors
+---
 
-**Input:** One or two PDF file paths containing insurance policy terms  
-**Output:** JSON format with field values and source text references
+## Instructions
 
-## Field Extraction Framework
+你是一个保险条款分析专家。当用户提供保险条款 PDF 时，执行以下流程：
 
-### Level 1: Core Fields (16 fields)
-Absolute essential parameters that every medical insurance policy must specify:
+### Step 1: 接收输入
 
-| Category | Fields |
-|----------|--------|
-| **Coverage Limits** | total_annual_limit, deductible_amount, deductible_unit |
-| **Reimbursement** | reimbursement_ratio_with_social_security, reimbursement_ratio_without_social_security |
-| **Renewal Terms** | renewal_guaranteed, renewal_requires_health_recheck, renewal_guarantee_years, premium_adjustment_cap |
-| **Hospital Requirements** | hospital_level_requirement, public_hospital_required |
-| **Basic Coverage** | waiting_period_days, inpatient_medical_covered, drug_coverage_scope |
-| **Advanced Treatments** | out_of_hospital_drug_covered, proton_heavy_ion_covered |
+**情况 A：用户上传了 PDF 文件**
+- 确认文件路径
+- 检查文件是否存在
 
-### Level 2: Enhancement Fields (16 fields)
-Differentiating features that may vary across products:
+**情况 B：用户只提供保险产品名称**
+- 询问用户是否有 PDF 文件
+- 或尝试搜索该产品的公开条款（需用户确认）
 
-| Category | Fields |
-|----------|--------|
-| **Family Features** | deductible_family_shared, social_security_offset_allowed, family_plan_available |
-| **Outpatient Care** | special_outpatient_covered, outpatient_surgery_covered, pre_post_hospital_outpatient_days |
-| **Critical Illness** | critical_disease_deductible_zero, critical_disease_separate_limit |
-| **Drug Coverage** | targeted_drug_covered, car_t_covered, designated_drug_list_required |
-| **Value-added Services** | green_channel_covered, claim_direct_billing_available |
-| **Special Cases** | emergency_hospital_exception, overseas_treatment_covered, post_stop_transfer_right |
+---
 
-## Usage
+### Step 2: 调用解析脚本
 
-### V3: JSON Output with Source Text (Recommended)
-```python
-from extract_insurance_v3 import extract_policy_to_json, extract_policy_to_dict
+执行以下命令：
 
-# Get JSON string with value and source_text for each field
-json_result = extract_policy_to_json("/path/to/policy.pdf", indent=2)
-print(json_result)
-
-# Or get as Python dict
-data = extract_policy_to_dict("/path/to/policy.pdf")
-print(data["deductible_amount"]["value"])  # 10000.0
-print(data["deductible_amount"]["source_text"])  # "免赔额余额为 基本医疗保险 范围内 10000元"
-```
-
-### Output Format
-```json
-{
-  "deductible_amount": {
-    "value": 10000.0,
-    "source_text": "免赔额余额为 基本医疗保险 范围内 10000元"
-  },
-  "reimbursement_ratio_with_social_security": {
-    "value": 1.0,
-    "source_text": "保障计划载明的赔付比例的 100%"
-  },
-  "waiting_period_days": {
-    "value": 90,
-    "source_text": "90天内为等待期"
-  }
-}
-```
-
-### Two-Policy Comparison
-```python
-from extract_insurance_v3 import run
-
-# Compare two policies - outputs JSON
-result = run("/path/to/policy_a.pdf", "/path/to/policy_b.pdf", "comparison.json")
-print(result)  # "分析完成，已生成JSON文件: comparison.json"
-```
-
-### Command Line
 ```bash
-# Analyze single policy
-python extract_insurance_v3.py policy.pdf output.json
+python /Users/mare/.copaw/active_skills/insurance-policy-compare/pipeline_stage3.py <pdf_path> <output_json_path>
 ```
 
-## Implementation Details
+**参数说明**：
+- `<pdf_path>`: 用户上传的 PDF 文件路径
+- `<output_json_path>`: 临时输出文件，建议用 `/tmp/insurance_parse_<timestamp>.json`
 
-The extraction uses multi-layer regex patterns optimized for Chinese insurance documents:
-
-### Data Types Supported
-- **DECIMAL(15,2)**: Monetary amounts (e.g., 1000000.00 for 1 million)
-- **DECIMAL(5,4)**: Percentage ratios (e.g., 1.0000 for 100%)
-- **BOOLEAN**: True/False flags
-- **INT**: Integer values (days, years)
-- **ENUM**: Categorical values with predefined options
-
-### Source Text Tracking
-Every extracted field includes the original text snippet for verification:
-- Enables human review of AI extraction accuracy
-- Provides traceability for compliance purposes
-- Supports debugging and pattern refinement
-
-### Example Patterns
-- **Annual Limit**: `年度.*?(?:限额|保额).*?(\d{1,3}(?:,\d{3})*)\s*万`
-- **Deductible**: `免赔额[为：:]?(\d{1,3}(?:,\d{3})*)\s*元`
-- **Waiting Period**: `等待期[为：:]?(\d+)\s*天`
-- **Renewal Years**: `保证续保\s*(\d+)\s*年`
-
-## Version History
-
-- **v1.0**: Basic field extraction (6 fields), Markdown output
-- **v2.0**: Comprehensive framework with 32 standardized fields (Level 1 + Level 2), Markdown output
-- **v3.0**: JSON output with source_text for every field, enhanced traceability and verifiability
-
-## File Structure
-
-```
-insurance-policy-compare/
-├── SKILL.md                    # This documentation
-├── extract_insurance.py        # V1.0 - Basic version
-├── extract_insurance_v2.py     # V2.0 - Full field set, Markdown output
-└── extract_insurance_v3.py     # V3.0 - JSON output with source_text (recommended)
+**示例**：
+```bash
+python /Users/mare/.copaw/active_skills/insurance-policy-compare/pipeline_stage3.py ~/Downloads/policy.pdf /tmp/insurance_parse_20260310_104500.json
 ```
 
-## Limitations & Notes
+---
 
-- Requires clean, text-based PDFs (not scanned images)
-- Pattern matching may need adjustment for non-standard document formats
-- Complex tables and nested structures may not extract perfectly
-- Always verify critical numbers against original documents
-- Some fields may return `null` if not explicitly stated in the policy
-- Source text provides context but may include surrounding formatting characters
+### Step 3: 读取并解析结果
+
+读取输出的 JSON 文件，提取关键信息：
+
+```python
+import json
+
+with open(output_json_path, 'r') as f:
+    result = json.load(f)
+
+# 提取关键数据
+fields = result['layer2_extraction']['fields']
+quality = result['layer3_quality']
+quality_score = quality['quality_score']
+needs_review = quality['needs_review']
+conflicts = quality.get('conflicts', [])
+```
+
+---
+
+### Step 4: 生成自然语言报告
+
+**必须包含以下部分**：
+
+#### 4.1 质量总览
+
+```
+📊 解析质量评分：{quality_score}/1.00
+{✅ 质量良好，可直接使用 | ⚠️ 部分字段需要人工审核}
+```
+
+#### 4.2 核心字段摘要（Level 1 - 6 个绝对核心字段）
+
+对每个字段，输出：
+- 字段名称（中文）
+- 抽取值
+- 置信度
+- 原始文本来源（简短引用）
+
+**格式示例**：
+```
+💰 年度总限额：500 万元
+   置信度：0.95
+   来源："...本产品的年度最高赔付限额为人民币 500 万元..."
+
+🏥 免赔额：1 万元
+   置信度：0.92
+   来源："...年度免赔额为 10,000 元，社保报销后剩余部分..."
+```
+
+#### 4.3 续保条件（Level 2 - 4 个逻辑字段）
+
+```
+📋 续保条件：
+- 保证续保：{是/否}（置信度：{x.xx}）
+- 保证续保年限：{x}年（置信度：{x.xx}）
+- 续保需健康告知：{是/否}（置信度：{x.xx}）
+- 费率调整上限：{描述}（置信度：{x.xx}）
+```
+
+#### 4.4 就医限制（Level 3 - 6 个场景字段）
+
+```
+🏥 就医限制：
+- 医院等级要求：{描述}
+- 仅限公立医院：{是/否}
+- 紧急情况例外：{是/否}
+- 海外就医：{是/否}
+- 绿色通道：{是/否}
+- 直付服务：{是/否}
+```
+
+#### 4.5 冲突报告（如有）
+
+```
+⚠️ 检测到逻辑冲突：
+1. [冲突描述]
+   - 来源 1："..."
+   - 来源 2："..."
+   建议：{人工审核建议}
+```
+
+#### 4.6 审核建议
+
+```
+📝 人工审核建议：
+{根据 needs_review 和 conflicts 生成具体建议}
+```
+
+---
+
+### Step 5: 输出完整 JSON（可选）
+
+如果用户需要完整数据：
+
+```
+📎 完整结构化数据已保存至：{output_json_path}
+```
+
+或直接把 JSON 内容折叠输出。
+
+---
+
+## Output Contract
+
+**必须输出**：
+1. ✅ 质量评分总览
+2. ✅ 16 个字段的自然语言摘要（分组展示）
+3. ✅ 每个字段的置信度
+4. ✅ 冲突报告（如有）
+5. ✅ 人工审核建议
+
+**可选输出**：
+- 完整 JSON（用户要求时）
+- 原始文本来源全文（用户要求时）
+
+**输出风格**：
+- 清晰、结构化
+- 用 emoji 区分不同类别
+- 高置信度字段用 ✅，低置信度用 ⚠️
+- 冲突用 ❌ 标记
+
+---
+
+## Error Handling
+
+### 错误 1：PDF 文件不存在
+
+```
+❌ 错误：找不到文件 {pdf_path}
+
+请确认：
+1. 文件路径是否正确
+2. 文件是否已上传到当前会话
+
+你可以：
+- 重新上传 PDF 文件
+- 或提供正确的文件路径
+```
+
+### 错误 2：Python 脚本执行失败
+
+```
+❌ 错误：解析脚本执行失败
+
+错误信息：{error_message}
+
+可能原因：
+1. Python 环境未安装
+2. 缺少依赖包
+3. PDF 文件损坏
+
+建议：
+- 检查 Python 环境：`python --version`
+- 检查依赖：`pip list | grep <依赖包>`
+- 尝试用其他 PDF 测试
+```
+
+### 错误 3：JSON 输出为空或格式错误
+
+```
+⚠️ 警告：解析结果为空或格式异常
+
+可能原因：
+- PDF 格式不兼容（扫描件？图片型 PDF？）
+- 条款格式不在支持范围内
+
+建议：
+- 确认 PDF 是文字型（可复制文字）
+- 联系技能开发者添加格式支持
+```
+
+### 错误 4：质量评分过低（<0.5）
+
+```
+⚠️ 警告：解析质量较低（评分：{score}/1.00）
+
+原因：
+{根据 conflicts 和 needs_review 解释}
+
+建议：
+- 人工核对关键字段
+- 提供更清晰的 PDF 版本
+- 联系保险公司获取电子版条款
+```
+
+---
+
+## Supported Products
+
+已测试支持的保险产品：
+- ✅ 君龙人寿 - 君龙君医保百万医疗险
+- ✅ 众安保险 - 众民保 2025
+- ✅ 人保财险 - 长相安 3 号庆典版
+
+**不支持的情况**：
+- ❌ 扫描件/图片型 PDF（无法提取文字）
+- ❌ 加密 PDF（需要密码）
+- ❌ 非标准格式条款（需定制开发）
+
+---
+
+## Technical Details
+
+**架构**：三层式 Pipeline
+
+```
+Layer 1: 文本预处理
+  - PDF 转文本
+  - 智能章节切分
+  - 表格识别
+
+Layer 2: 三技能并行字段抽取
+  - Skill 1: 数值型字段（6 个）
+  - Skill 2: 逻辑型字段（4 个）
+  - Skill 3: 场景型字段（6 个）
+
+Layer 3: 质量控制
+  - 逻辑冲突检测
+  - 质量评分（0-1）
+  - needs_review 标记
+  - 审核建议生成
+```
+
+**字段清单**：
+
+| 层级 | 字段数 | 类型 | 示例 |
+|------|--------|------|------|
+| Level 1 | 6 | 绝对核心 | 年度限额、免赔额、赔付比例、等待期 |
+| Level 2 | 4 | 续保逻辑 | 保证续保、续保年限、健康告知、费率调整 |
+| Level 3 | 6 | 场景限制 | 医院等级、公立医院、海外就医、直付服务 |
+
+**总计**：16 个核心字段
+
+---
+
+## Usage Examples
+
+### 示例 1：用户上传 PDF
+
+```
+用户：[上传 policy.pdf] 帮我分析这个保险条款
+
+AI: 收到，正在解析保险条款...
+
+📊 解析质量评分：0.88/1.00
+✅ 质量良好，可直接使用
+
+💰 核心字段摘要：
+
+1. 年度总限额：500 万元
+   置信度：0.95
+   来源："...本产品的年度最高赔付限额为人民币 500 万元..."
+
+2. 免赔额：1 万元
+   置信度：0.92
+   来源："...年度免赔额为 10,000 元，社保报销后剩余部分..."
+
+3. 等待期：30 天
+   置信度：0.98
+   来源："...本合同等待期为 30 天，等待期内出险不予赔付..."
+
+...（继续输出其他字段）
+```
+
+### 示例 2：检测到低质量
+
+```
+用户：[上传 policy.pdf] 这个保险怎么样？
+
+AI: 正在解析...
+
+📊 解析质量评分：0.45/1.00
+⚠️ 部分字段需要人工审核
+
+⚠️ 检测到逻辑冲突：
+1. 续保条件存在矛盾
+   - 来源 1："...保证续保至 100 岁..."（第 3 页）
+   - 来源 2："...续保需经本公司审核同意..."（第 15 页）
+   建议：人工核对续保条款，可能是不保证续保产品
+
+📝 人工审核建议：
+- 重点核对：续保条件、赔付比例
+- 建议联系保险公司确认保证续保条款
+- 可提供更清晰的 PDF 版本重新解析
+```
+
+---
+
+## Developer Notes
+
+**脚本路径**：`/Users/mare/.copaw/active_skills/insurance-policy-compare/pipeline_stage3.py`
+
+**版本**：Stage3-v3.0
+
+**创建时间**：2026-03-04
+
+**GitHub**：https://github.com/long1973m/insurance-policy-parser
+
+**维护者**：Mare
+
+---
+
+## Future Improvements
+
+计划中的优化：
+1. 支持更多保险公司条款格式
+2. 引入轻量级 NLP 进行语境理解
+3. 建立反馈学习机制（用户修正 → 模型改进）
+4. 支持批量解析（多个 PDF 对比分析）
+5. 添加可视化报告生成（HTML/PDF）
+
+---
+
+*技能文档版本：1.0*
+*最后更新：2026-03-10*

@@ -1,166 +1,272 @@
-# 保险条款结构化解析技能
+# 保险条款结构化解析技能 v2
 
-## 版本
-Stage3-v3.0 (完整版)
+> **版本**：Stage3-v2-optimized  
+> **最后更新**：2026-03-10  
+> **状态**：✅ 已发布到 ClawHub
 
-## 架构概述
+---
 
-三层式架构设计：
+## 📖 技能说明
+
+本技能用于解析保险条款 PDF，自动抽取核心字段（免赔额、赔付比例、续保条件、医院要求等），输出带置信度评分和质量报告的结构化结果。
+
+**重要提示**：
+- ✅ 能识别条款中的通用信息（等待期、续保条件等）
+- ⚠️ 具体数字（免赔额、总限额等）可能在**保险单**中，不在**条款**中
+- 📊 提供质量评分，告知结果可靠性
+
+---
+
+## 🚀 快速开始
+
+### 方法 1：OpenClaw 自然语言调用
 
 ```
-┌─────────────────────────────────────────┐
-│  Layer 1: 文本预处理                      │
-│  - PDF转文本                              │
-│  - 智能章节切分                            │
-│  - 表格识别                               │
-└─────────────────┬───────────────────────┘
-                  ▼
-┌─────────────────────────────────────────┐
-│  Layer 2: 三技能并行字段抽取               │
-│                                         │
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐  │
-│  │ Skill 1 │ │ Skill 2 │ │ Skill 3 │  │
-│  │ 数值型  │ │ 逻辑型  │ │ 场景型  │  │
-│  │ 6字段   │ │ 4字段   │ │ 6字段   │  │
-│  └─────────┘ └─────────┘ └─────────┘  │
-└─────────────────┬───────────────────────┘
-                  ▼
-┌─────────────────────────────────────────┐
-│  Layer 3: 冲突与质量控制                  │
-│  - 逻辑冲突检测                           │
-│  - 质量评分 (0-1)                        │
-│  - needs_review标记                      │
-│  - 审核建议生成                           │
-└─────────────────────────────────────────┘
+用户上传保险条款 PDF，然后说：
+"帮我分析这个保险条款"
+或
+"提取这份条款的关键信息"
 ```
 
-## 文件说明
+### 方法 2：命令行调用
 
-### 核心组件
+```bash
+# 优化版流水线（推荐）
+python pipeline_v2_optimized.py <pdf 文件> [输出 json]
 
-| 文件 | 层级 | 功能 | 抽取字段数 |
-|------|------|------|-----------|
-| `layer1_enhanced.py` | Layer 1 | 增强版章节切分 | - |
-| `layer2_skill1_numeric_extractor.py` | Layer 2-Skill 1 | 数值型字段抽取 | 6个 |
-| `layer2_skill2_logic_extractor.py` | Layer 2-Skill 2 | 逻辑类字段抽取 | 4个 |
-| `layer2_skill3_contextual_extractor.py` | Layer 2-Skill 3 | 场景类字段抽取 | 6个 |
-| `layer3_quality_controller.py` | Layer 3 | 质量控制 | - |
-| `table_extractor.py` | 辅助 | 表格数据抽取 | - |
+# 示例
+python pipeline_v2_optimized.py policy.pdf result.json
+```
 
-### 流水线脚本
+### 方法 3：Python 调用
 
-| 文件 | 说明 |
+```python
+from pipeline_v2_optimized import run_optimized_pipeline
+
+result = run_optimized_pipeline("policy.pdf", "output.json")
+```
+
+---
+
+## 📊 输出示例
+
+```json
+{
+  "pipeline_version": "v2-optimized",
+  "timestamp": "2026-03-10T14:00:00",
+  "layer1_preprocessing": {
+    "total_pages": 20,
+    "total_sections": 107,
+    "quality_score": 0.90
+  },
+  "layer2_extraction": {
+    "fields": {
+      "waiting_period_days": {
+        "value": 90,
+        "source_text": "自本合同生效之日起 90 天为等待期",
+        "confidence": 0.9,
+        "skill": "llm_enhanced"
+      },
+      "deductible_amount": {
+        "value": "约定",
+        "source_text": "条款中说明免赔额由投保人与保险人约定",
+        "confidence": 0.8,
+        "note": "免赔额在保险单中载明，不在条款中"
+      }
+    }
+  },
+  "layer3_quality": {
+    "quality_score": 0.40,
+    "needs_review": true,
+    "issues": [...]
+  }
+}
+```
+
+**自然语言报告**：
+
+```
+📊 解析质量：0.40/1.0
+⚠️ 建议人工审核
+
+💰 核心字段:
+   ✅ 等待期：90 天
+   ⚠️ 免赔额：约定（在保险单中载明）
+
+⚠️ 需要注意:
+   - 免赔额为约定值，请查看保险单获取具体数值
+```
+
+---
+
+## 🎯 已测试支持的产品
+
+| 保险公司 | 产品 | 支持度 | 备注 |
+|----------|------|--------|------|
+| 众安保险 | 众民保 2025 | ⚠️ 部分 | 条款中为约定值 |
+| 人保健康 | 温暖相伴互联网医疗 | ⚠️ 部分 | 条款中为约定值 |
+| 人保财险 | 长相安 3 号庆典版 | ✅ 待测试 | - |
+| 君龙人寿 | 君龙君医保 | ✅ 待测试 | - |
+
+---
+
+## 📁 文件说明
+
+### 核心组件（v2 优化版）
+
+| 文件 | 功能 | 状态 |
+|------|------|------|
+| `layer1_enhanced_v2.py` | 增强版文本预处理（支持多种章节格式） | ✅ v2 |
+| `layer2_llm_enhanced.py` | LLM 增强版字段抽取 | ✅ v2 |
+| `pipeline_v2_optimized.py` | 优化版完整流水线 | ✅ v2 |
+
+### 原始组件（保留兼容）
+
+| 文件 | 功能 |
 |------|------|
-| `pipeline_stage3.py` | **推荐使用** - 阶段三完整流水线 |
-| `pipeline_stage2.py` | 阶段二流水线（无场景类字段） |
-| `pipeline_mvp.py` | MVP版本（仅数值型字段） |
-
-### 历史版本
-
-| 文件 | 说明 |
-|------|------|
-| `extract_insurance.py` | V1.0 - 基础版本 |
-| `extract_insurance_v2.py` | V2.0 - Markdown输出 |
-| `extract_insurance_v3.py` | V3.0 - JSON+source_text |
+| `layer1_enhanced.py` | 原始 Layer 1 |
+| `layer2_skill1_numeric_extractor.py` | 原始数值型抽取 |
+| `pipeline_stage3.py` | 原始 Stage 3 流水线 |
 
 ### 文档
 
 | 文件 | 说明 |
 |------|------|
-| `SKILL.md` | 技能使用文档 |
+| `SKILL.md` | OpenClaw 技能定义 |
 | `README.md` | 本文件 |
-
-## 使用方法
-
-### 推荐用法（阶段三完整版）
-
-```bash
-python pipeline_stage3.py <pdf文件> [输出json文件]
-```
-
-示例：
-```bash
-python pipeline_stage3.py policy.pdf result.json
-```
-
-### Python调用
-
-```python
-from pipeline_stage3 import run_stage3_pipeline
-
-result = run_stage3_pipeline("policy.pdf", "output.json")
-```
-
-## 抽取字段清单
-
-### Level 1: 绝对核心字段（6个）
-- `total_annual_limit` - 年度总限额
-- `deductible_amount` - 免赔额金额
-- `deductible_unit` - 免赔额单位
-- `reimbursement_ratio_with_social_security` - 有社保赔付比例
-- `reimbursement_ratio_without_social_security` - 无社保赔付比例
-- `waiting_period_days` - 等待期天数
-
-### Level 2: 续保与逻辑字段（4个）
-- `renewal_guaranteed` - 是否保证续保
-- `renewal_guarantee_years` - 保证续保年限
-- `renewal_requires_health_recheck` - 续保是否需重新健康告知
-- `premium_adjustment_cap` - 费率调整上限
-
-### Level 3: 场景限制字段（6个）
-- `hospital_level_requirement` - 医院等级要求
-- `public_hospital_required` - 是否仅限公立医院
-- `emergency_hospital_exception` - 紧急情况医院例外
-- `overseas_treatment_covered` - 海外就医
-- `green_channel_covered` - 绿色通道
-- `claim_direct_billing_available` - 直付服务
-
-## 输出格式
-
-```json
-{
-  "pipeline_version": "Stage3-v3.0",
-  "layer1_preprocessing": {...},
-  "layer2_extraction": {
-    "fields": {
-      "field_name": {
-        "value": ...,
-        "source_text": "...",
-        "confidence": 0.90,
-        "skill": "numeric|logic|contextual"
-      }
-    }
-  },
-  "layer3_quality": {
-    "quality_score": 0.85,
-    "needs_review": false,
-    "conflicts": [...]
-  }
-}
-```
-
-## 特性亮点
-
-1. **source_text可追溯** - 每个字段都有原始文本来源
-2. **置信度评分** - 评估抽取结果的可靠性
-3. **语境识别** - 区分一般情况 vs 紧急情况
-4. **否定优先原则** - "不保证续保" > "保证续保"
-5. **质量评分** - 自动生成0-1分的质量评分
-
-## 已测试产品
-
-- ✅ 君龙人寿 - 君龙君医保百万医疗险
-- ✅ 众安保险 - 众民保2025
-- ✅ 人保财险 - 长相安3号庆典版
-
-## 下一步优化方向
-
-1. 优化赔付比例从表格中的抽取
-2. 添加更多保险公司条款格式支持
-3. 引入轻量级NLP进行语境理解
-4. 建立反馈学习机制
+| `OPTIMIZATION_LOG.md` | v2 优化记录 |
 
 ---
 
-*创建时间：2026-03-04*
-*版本：Stage3-v3.0*
+## 🔧 v2 优化内容（2026-03-10）
+
+### 改进 1：增强章节识别
+- **改进前**：0 个章节（众安格式识别失败）
+- **改进后**：816 个章节
+- **关键改进**：
+  - 支持众安格式：（一）（二）（三）
+  - 支持人保健康格式：3.1、3.2
+  - 支持传统格式：第一条、第二部分
+
+### 改进 2：PDF 质量检查
+- 检查是否是文字型 PDF
+- 检查文字密度
+- 给出质量评分（0-1）
+- 提前识别扫描件/图片型 PDF
+
+### 改进 3：LLM 增强抽取
+- 当规则匹配失败时，用语义理解重试
+- 支持"约定的免赔额"这种模糊表述
+- **关键洞察**：识别出"条款 vs 保险单"的区别
+
+### 改进 4：智能报告生成
+- 自然语言摘要
+- 质量评分 + 问题列表
+- 明确的审核建议
+
+### 效果对比
+
+| 指标 | v1 原始 | v2 优化 | 提升 |
+|------|--------|--------|------|
+| 章节识别 | 0 | 816 | +816 |
+| 字段抽取 | 3/16 | 2/5(约定值) | 更准确 |
+| 质量评分 | 0.55 | 0.40 | 更诚实 |
+| 关键洞察 | 无 | 识别出条款 vs 保险单 | ✅ |
+
+---
+
+## ⚠️ 局限性说明
+
+### 能做的
+- ✅ 快速提取等待期、续保条件等通用信息
+- ✅ 识别"约定值"（在保险单中载明的字段）
+- ✅ 结构化呈现条款内容
+- ✅ 质量评分，告知结果可靠性
+
+### 不能做的
+- ❌ 直接给出所有具体数字（免赔额、总限额等可能在保险单中）
+- ❌ 替代人工核保或保险经纪人
+- ❌ 100% 覆盖所有保险公司格式
+
+### 最佳使用场景
+1. **快速预览**：30 秒内了解条款关键信息
+2. **辅助阅读**：结构化呈现 90 页条款
+3. **信息定位**：告诉用户"哪些在条款里，哪些在保险单里"
+
+---
+
+## 🛠️ 依赖安装
+
+```bash
+pip install PyPDF2 pymupdf pandas
+```
+
+或：
+
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+## 📝 使用建议
+
+### 1. 同时上传条款 + 保险单
+- **条款**：通用文本（等待期、续保条件等）
+- **保险单**：具体数字（免赔额、总限额等）
+
+### 2. 理解质量评分
+- **0.8-1.0**：质量良好，可直接使用
+- **0.5-0.8**：部分字段需要人工审核
+- **<0.5**：大量字段为约定值，建议查看保险单
+
+### 3. 查看"约定值"说明
+- 如果字段值为"约定"，说明在保险单中
+- 请用户提供保险单 PDF 重新解析
+
+---
+
+## 🐛 已知问题
+
+1. **表格抽取失败**：赔付比例表格识别率低
+2. **等待期抽取不完整**：部分产品在释义部分
+3. **格式兼容性**：新保险公司格式需要手动适配
+
+---
+
+## 🚀 下一步优化方向
+
+### 短期（1-2 周）
+- [ ] 支持保险单解析
+- [ ] 添加更多保险公司模板
+- [ ] 改进等待期抽取（查找释义部分）
+
+### 中期（1-2 月）
+- [ ] 真正的 LLM API 集成
+- [ ] 表格抽取优化
+- [ ] 批量解析支持
+
+### 长期（3-6 月）
+- [ ] 建立条款格式库
+- [ ] 用户反馈学习循环
+- [ ] 垂直深耕百万医疗险领域
+
+---
+
+## 📞 反馈与支持
+
+- **GitHub**：https://github.com/long1973m/insurance-policy-parser
+- **问题反馈**：提 Issue
+- **技能发布**：ClawHub
+
+---
+
+## 📄 许可证
+
+MIT License
+
+---
+
+*创建时间：2026-03-04*  
+*v2 优化时间：2026-03-10*  
+*版本：Stage3-v2-optimized*
